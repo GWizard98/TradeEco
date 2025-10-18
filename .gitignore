@@ -1,0 +1,20 @@
+# macOS
+.DS_Store
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+.env
+.env.*
+.coverage
+htmlcov/
+.dist/
+dist/
+build/
+
+# Editors
+.vscode/
+.idea/
