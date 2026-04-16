@@ -1,0 +1,64 @@
+[package]
+name = "hq"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter"] }
+once_cell = "1.19"
+csv = "1.3"
+rand = "0.8"
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.8"
+uuid = { version = "1", features = ["v4", "serde"] }
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
+
+# Core internal crates (always on)
+ir = { path = "../ir" }
+guardian = { path = "../guardian" }
+api = { path = "../api" }
+alphascout = { path = "../alphascout" }
+risksmith = { path = "../risksmith" }
+meta = { path = "../meta" }
+ledger = { path = "../ledger" }
+portfolio = { path = "../portfolio" }
+
+# Optional services/agents
+axum = { version = "0.7", optional = true }
+prometheus = { version = "0.13", optional = true }
+regime = { path = "../regime", optional = true }
+sentiment = { path = "../sentiment", optional = true }
+sentinel = { path = "../sentinel", optional = true }
+pathfinder = { path = "../pathfinder", optional = true }
+tca = { path = "../tca", optional = true }
+brokergate = { path = "../brokergate", optional = true }
+alerts = { path = "../alerts", optional = true }
+broker_mock = { path = "../broker_mock", optional = true }
+
+[features]
+# Minimal by default
+default = []
+
+# Optional capabilities (compile-time)
+metrics = ["dep:axum", "dep:prometheus"]
+regime = ["dep:regime"]
+sentiment = ["dep:sentiment", "dep:sentinel"]
+sentinel = ["dep:sentinel"]
+pathfinder = ["dep:pathfinder", "dep:broker_mock", "dep:tca"]
+brokergate = ["dep:brokergate"]
+alerts = ["dep:alerts"]
+
+# Convenience: enable everything
+full = ["metrics", "regime", "sentiment", "sentinel", "pathfinder", "brokergate", "alerts"]
+
+# Existing pass-through feature flags
+# Enable ONNX-backed impact model inside Pathfinder via: cargo run -p hq --features pathfinder-onnx
+pathfinder-onnx = ["pathfinder/onnx"]
+# Enable ONNX-backed regime classifier via: cargo run -p hq --features regime-onnx
+regime-onnx = ["regime/onnx"]
+# Enable ONNX-backed sentiment model via: cargo run -p hq --features sentiment-onnx
+sentiment-onnx = ["sentiment/onnx"]

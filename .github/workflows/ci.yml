@@ -1,0 +1,43 @@
+name: CI
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  rust:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - name: Build (minimal)
+        run: |
+          cd hq
+          cargo build -p hq --no-default-features --all-targets
+      - name: Build (full)
+        run: |
+          cd hq
+          cargo build -p hq --no-default-features --features full --all-targets
+      - name: Lint (fmt)
+        run: |
+          cd hq
+          cargo fmt --all -- --check
+      - name: Lint (clippy, minimal)
+        run: |
+          cd hq
+          cargo clippy -p hq --no-default-features --all-targets -- -D warnings
+      - name: Lint (clippy, full)
+        run: |
+          cd hq
+          cargo clippy -p hq --no-default-features --features full --all-targets -- -D warnings
+      - name: Test (minimal)
+        run: |
+          cd hq
+          cargo test -p hq --no-default-features
+      - name: Test (full)
+        run: |
+          cd hq
+          cargo test -p hq --no-default-features --features full

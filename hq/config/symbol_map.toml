@@ -1,0 +1,12 @@
+# Broker-specific symbol mapping for manual MT4/MT5 execution
+# left side = TradeEco symbol; right side = MT4 symbol
+[mt4]
+EUR_USD = "EURUSD.m"
+USD_JPY = "USDJPY.m"
+EUR_JPY = "EURJPY.m"
+EUR_GBP = "EURGBP.m"
+USD_MXN = "USDMXN.m"
+XAU_USD = "XAUUSD"
+US100 = "NAS100"
+AAPL = "AAPL"
+MSFT = "MSFT"

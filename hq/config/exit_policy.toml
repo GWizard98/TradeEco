@@ -1,0 +1,52 @@
+# Exit policy (reference spec for HQ)
+# NOTE: This file is a template. Runtime wiring may be partial until code references it.
+
+[exit]
+# One of: "swing", "trend_ma", "trend_structure", "structure"
+mode = "swing"
+
+[exit.swing]
+# Exit at opposing structure points
+exit_on_swing_extrema = true        # exit long at prior swing high; short at prior swing low
+exit_on_support_resistance = true   # use SR zones from lookback
+exit_on_channel_touch = true        # requires channel inputs
+sr_lookback_bars = 100
+channel_lookback_bars = 20
+channel_type = "donchian"          # donchian|bollinger|keltner|none
+
+[exit.trend_ma]
+period = 200
+confirm_on_close = true             # require close beyond MA
+buffer_bps = 0                      # extra cushion beyond MA to avoid whipsaw
+
+[exit.trend_structure]
+# Trail to n-back swing level
+trail_n_swings = 1                  # 1 = most recent swing, 2 = prior to last
+confirm_on_close = false            # if true, wait for bar close beyond level
+
+[exit.structure]
+# Price-action exits: trail by swing structure, partial at first trouble area (FTA), channels/patterns optional
+trail_n_swings = 1
+confirm_on_close = true
+buffer_pips = 5.0                   # if FX and pip_size known; else ignored
+buffer_atr_mult = 0.0               # alternative buffer as ATR multiple
+sr_lookback_bars = 200
+fta_partial_pct = 0.5               # take partial profits at first trouble area
+[channel]
+enabled = true
+type = "donchian"                   # donchian|bollinger|keltner
+lookback_bars = 50
+[patterns]
+use_engulfing = true
+use_pinbar = true
+min_body_frac = 0.5
+
+[overrides]
+# Fixed TP/SL still allowed; trailing exit takes precedence if triggered
+enable_fixed_tp = true
+enable_fixed_sl = true
+fixed_tp_atr_mult = 2.0
+fixed_sl_atr_mult = 2.0
+# Optional absolute pip exits for swing mode (requires pip_size)
+stop_pips = 40.0
+tp_pips = 40.0

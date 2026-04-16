@@ -1,0 +1,39 @@
+[workspace]
+members = [
+  "crates/hq",
+  "crates/guardian",
+  "crates/ir",
+  "crates/alphascout",
+  "crates/api",
+  "crates/risksmith",
+  "crates/meta",
+  "crates/broker_mock",
+  "crates/tca",
+  "crates/pathfinder",
+  "crates/regime",
+  "crates/sentiment",
+  "crates/sentinel",
+  "crates/brokergate",
+  "crates/alerts",
+  "crates/ledger",
+  "crates/portfolio",
+]
+resolver = "2"
+
+[workspace.dependencies]
+anyhow = "1"
+thiserror = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+uuid = { version = "1", features = ["v4", "serde"] }
+bytes = "1"
+prost = "0.13"
+prost-types = "0.13"
+wasmtime = "25"
+wasmtime-wasi = "25"
+sha2 = "0.10"
+ed25519-dalek = "2"
+rand = "0.8"

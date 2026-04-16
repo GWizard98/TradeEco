@@ -1,0 +1,15 @@
+[package]
+name = "guardian"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1"
+sha2 = "0.10"
+ed25519-dalek = "2"
+thiserror = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
+ir = { path = "../ir" }
+api = { path = "../api" }

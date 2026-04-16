@@ -1,0 +1,22 @@
+[symbols]
+# Add one domain per line; used by Ecosystem-Guardian to allow outbound egress
+# example.com
+# finance.yahoo.com
+# tradingview.com
+# forexnews.com
+# fxstreet.com
+# bloomberg.com
+# youtube.com
+api-fxpractice.oanda.com
+# api-fxtrade.oanda.com
+
+feeds.finance.yahoo.com
+www.fxstreet.com
+feeds.reuters.com
+feeds.content.dowjones.io
+feeds.bloomberg.com
+www.forexnews.com
+
+www.reuters.com
+www.forexlive.com
+www.dailyfx.com

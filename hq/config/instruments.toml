@@ -1,0 +1,20 @@
+[symbols]
+[symbols.AAPL]
+tick_size = 0.01
+lot_step = 1.0
+min_qty = 1.0
+max_qty = 1000000.0
+min_notional = 10.0
+# Optional FX fields (ignored for non-FX):
+# pip_size = 0.0001
+# pip_value_per_unit = 0.0001
+
+# Example FX instrument
+# [symbols.EUR_USD]
+# tick_size = 0.00001
+# lot_step = 1.0             # units
+# min_qty = 1.0
+# max_qty = 10000000.0
+# min_notional = 1.0
+# pip_size = 0.0001
+# pip_value_per_unit = 0.0001   # $ per pip for 1 unit

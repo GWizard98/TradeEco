@@ -1,0 +1,17 @@
+[package]
+name = "pathfinder"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+api = { path = "../api" }
+broker_mock = { path = "../broker_mock" }
+uuid = { workspace = true }
+onnxruntime = { version = "0.0.14", optional = true }
+
+[features]
+default = []
+onnx = ["onnxruntime"]

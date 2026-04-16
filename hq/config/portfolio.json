@@ -1,0 +1,6 @@
+{
+  "corr_to_portfolio": 0.25,
+  "sector_exposure_notional": 20000.0,
+  "recent_max_drawdown": 0.05,
+  "loss_cooldown": false
+}

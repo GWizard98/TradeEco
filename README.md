@@ -1,16 +1,20 @@
-# CG Automated Trader
+# CG Automated Trader (HQ)
 
-This project adapts a copy of Cyber-Guardian's AI/ML algorithm to drive an automated trading system. The ML model is integrated via an adapter so it can be swapped between a local copy or a remote service.
+Rust-based trading HQ orchestrating agents for signal, risk, execution, and audit. Python CLI was removed to downsize; use the Rust binary.
 
 ## Getting Started
-- Python >= 3.10 recommended
-- Create and activate a virtual environment
-- Install dependencies: `pip install -r requirements.txt`
-- Run CLI: `python -m src.auto_trader.main --help`
+- Install Rust toolchain (stable)
+- Build and run (minimal core):
+  - `cd hq && RUST_LOG=info cargo run -p hq --no-default-features`
+- Full ecosystem (all agents/services):
+  - `cd hq && RUST_LOG=info cargo run -p hq --no-default-features --features full`
 
 ## Structure
-- `src/auto_trader/main.py` – CLI entry for backtesting/live trading
-- `src/auto_trader/cg_model_adapter.py` – Adapter to the Cyber-Guardian model/service
+- `hq/crates/hq` – entrypoint binary (Headquarters)
+- Core agents always included: AlphaScout (signals), RiskSmith (sizing), Guardian (validation/audit), Ledger, Portfolio, Meta
+- Optional features: `regime`, `sentiment` (with `sentinel` collectors), `pathfinder` (paper exec + TCA), `brokergate` (live Oanda), `alerts`, `metrics`
 
-## Notes
-- Place your CG model artifacts or configure `ML_SERVICE_URL` to point to a running service.
+## Modes
+- Backtest: `HQ_MODE=backtest`
+- Paper: `HQ_MODE=paper` (requires `--features pathfinder`)
+- Live Oanda: `HQ_MODE=live_oanda` (requires `--features brokergate`)

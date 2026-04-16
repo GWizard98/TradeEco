@@ -1,0 +1,6 @@
+[exit]
+mode = "swing"
+
+[overrides]
+fixed_tp_atr_mult = 2.0
+fixed_sl_atr_mult = 2.0

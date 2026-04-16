@@ -1,0 +1,9 @@
+[package]
+name = "portfolio"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1"
+ledger = { path = "../ledger" }
+rusqlite = { version = "0.31", features = ["bundled"] }
