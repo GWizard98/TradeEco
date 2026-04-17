@@ -1,0 +1,23 @@
+{
+  "EURUSD": {
+    "bb_pct": 0.05,
+    "rsi_low": 35,
+    "rsi_high": 65,
+    "fills": 6,
+    "wr": 50.0,
+    "pnl": 37.5
+  },
+  "GBPUSD": {
+    "bb_pct": 0.05,
+    "rsi_low": 30,
+    "rsi_high": 70,
+    "fills": 13,
+    "wr": 0.0,
+    "pnl": -162.5
+  },
+  "AUDUSD": null,
+  "USDCAD": null,
+  "USDJPY": null,
+  "USDMXN": null,
+  "XAUUSD": null
+}

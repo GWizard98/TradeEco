@@ -1606,15 +1606,9 @@ fn backtest() -> anyhow::Result<()> {
             vol,
             rsi_14,
         };
-        // Directional RSI alignment check
+        // MA direction (used by BB entry signal below)
         let ma_bullish = fast > slow;
         let ma_bearish = fast < slow;
-        let rsi_confirms = (ma_bullish && rsi_14 > 55.0) || (ma_bearish && rsi_14 < 45.0);
-        if !rsi_confirms {
-            DECISIONS_TOTAL.fetch_add(1, Ordering::Relaxed);
-            ABSTAINS_TOTAL.fetch_add(1, Ordering::Relaxed);
-            continue;
-        }
 
         // MACD: 12-period EMA - 26-period EMA
         let macd_line = if i >= 26 {
