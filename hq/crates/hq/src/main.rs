@@ -312,6 +312,7 @@ static SLIPPAGE_BPS_SUM: Lazy<AtomicU64> = Lazy::new(|| AtomicU64::new(0));
 static LAST_BUY_PRICE: Lazy<std::sync::Mutex<f64>> = Lazy::new(|| std::sync::Mutex::new(0.0));
 static LAST_SELL_PRICE: Lazy<std::sync::Mutex<f64>> = Lazy::new(|| std::sync::Mutex::new(0.0));
 static PNL_TOTAL: Lazy<std::sync::Mutex<f64>> = Lazy::new(|| std::sync::Mutex::new(0.0));
+static TRADE_RECORDS: Lazy<std::sync::Mutex<Vec<(String, f64, f64, f64, usize)>>> = Lazy::new(|| std::sync::Mutex::new(vec![]));
 
 #[cfg(feature = "metrics")]
 async fn health_server(port: u16) {
@@ -810,6 +811,17 @@ fn run_once_with(input: alphascout::Inputs) -> anyhow::Result<()> {
                     }
                     *LAST_SELL_PRICE.lock().unwrap() = rpt.avg_price;
                     *LAST_BUY_PRICE.lock().unwrap() = 0.0;
+                }
+                // Record trade for per-trade P&L simulation
+                if let (Some(sl), Some(tp)) = (order.stop_loss, order.take_profit) {
+                    let idx = DECISIONS_TOTAL.load(Ordering::Relaxed) as usize;
+                    TRADE_RECORDS.lock().unwrap().push((
+                        rpt.side.clone(),
+                        rpt.avg_price,
+                        sl,
+                        tp,
+                        idx,
+                    ));
                 }
             }
             #[cfg(feature = "pathfinder")]
@@ -1566,11 +1578,8 @@ fn backtest() -> anyhow::Result<()> {
         } else { 50.0 };
         // Hard RSI filter - skip neutral zone AND overbought/oversold extremes
         // Also handled in signal alignment check below
-        if rsi_14 > 45.0 && rsi_14 < 55.0 {
-            DECISIONS_TOTAL.fetch_add(1, Ordering::Relaxed);
-            ABSTAINS_TOTAL.fetch_add(1, Ordering::Relaxed);
-            continue;
-        }
+        // RSI neutral zone filter disabled for BB strategy
+        // if rsi_14 > 45.0 && rsi_14 < 55.0 { continue; }
         let fast = if i >= 9 {
             prices[i - 9..=i].iter().copied().sum::<f64>() / 10.0
         } else {
@@ -1598,16 +1607,68 @@ fn backtest() -> anyhow::Result<()> {
             rsi_14,
         };
         // Directional RSI alignment check
-        // Buy signal (fast > slow) needs RSI > 55 for confirmation
-        // Sell signal (fast < slow) needs RSI < 45 for confirmation
         let ma_bullish = fast > slow;
         let ma_bearish = fast < slow;
-        let rsi_confirms = (ma_bullish && rsi_14 > 65.0) || (ma_bearish && rsi_14 < 35.0);
+        let rsi_confirms = (ma_bullish && rsi_14 > 55.0) || (ma_bearish && rsi_14 < 45.0);
         if !rsi_confirms {
             DECISIONS_TOTAL.fetch_add(1, Ordering::Relaxed);
             ABSTAINS_TOTAL.fetch_add(1, Ordering::Relaxed);
             continue;
         }
+
+        // MACD: 12-period EMA - 26-period EMA
+        let macd_line = if i >= 26 {
+            let ema12 = {
+                let k = 2.0 / (12.0 + 1.0);
+                let mut ema = prices[i - 26];
+                for &px in &prices[i - 25..=i] { ema = px * k + ema * (1.0 - k); }
+                ema
+            };
+            let ema26 = {
+                let k = 2.0 / (26.0 + 1.0);
+                let mut ema = prices[i - 26];
+                for &px in &prices[i - 25..=i] { ema = px * k + ema * (1.0 - k); }
+                ema
+            };
+            ema12 - ema26
+        } else { 0.0 };
+
+        // MACD signal line (9-period EMA of macd) - simplified as SMA here
+        let macd_signal = if i >= 35 {
+            let window = &prices[i - 8..=i];
+            let k = 2.0 / (26.0 + 1.0);
+            window.iter().map(|&px| {
+                let e12 = { let mut e = px; let k12 = 2.0/(12.0+1.0); e = px*k12 + e*(1.0-k12); e };
+                let e26 = { let mut e = px; e = px*k + e*(1.0-k); e };
+                e12 - e26
+            }).sum::<f64>() / 9.0
+        } else { 0.0 };
+
+        // Bollinger Bands: 20-period SMA +/- 2 standard deviations
+        let (bb_upper, bb_lower) = if i >= 20 {
+            let w = &prices[i - 19..=i];
+            let mean = w.iter().sum::<f64>() / 20.0;
+            let std = (w.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / 20.0).sqrt();
+            (mean + 2.0 * std, mean - 2.0 * std)
+        } else { (*p * 1.01, *p * 0.99) };
+
+        // PRIMARY ENTRY: BB touch + RSI extreme
+        // Buy when price near lower BB AND RSI oversold (< 40) AND MA trend is up
+        // Sell when price near upper BB AND RSI overbought (> 60) AND MA trend is down
+        let bb_buy_signal = *p <= bb_lower * 1.001 && rsi_14 < 35.0;
+        let bb_sell_signal = *p >= bb_upper * 0.999001 && rsi_14 > 65.0;
+
+        // MACD as secondary confirmation
+        let macd_bullish = macd_line > macd_signal;
+        let macd_bearish = macd_line < macd_signal;
+
+        let entry_signal = bb_buy_signal || bb_sell_signal;
+        if !entry_signal {
+            DECISIONS_TOTAL.fetch_add(1, Ordering::Relaxed);
+            ABSTAINS_TOTAL.fetch_add(1, Ordering::Relaxed);
+            continue;
+        }
+
         let _ = run_once_with(input);
     }
     let dec = DECISIONS_TOTAL.load(Ordering::Relaxed);
@@ -1619,8 +1680,63 @@ fn backtest() -> anyhow::Result<()> {
         0.0
     };
     let pnl = *PNL_TOTAL.lock().unwrap();
-    println!("=== Backtest Summary ===\nDecisions: {}\nAbstains: {} ({}%)\nFills: {}\nAvg Slippage (bps): {:.2}\nTotal P&L: ${:.2}",
-        dec, abst, if dec>0 { (abst as f64 / dec as f64)*100.0 } else { 0.0 }, fills, avg_slip, pnl);
+    // Per-trade P&L using fixed 50pip TP / 25pip SL
+    // This simulates a 2:1 reward:risk ratio per trade
+    let trades = TRADE_RECORDS.lock().unwrap().clone();
+    let mut per_trade_pnl = 0.0_f64;
+    let mut wins = 0usize;
+    let mut losses = 0usize;
+    let tp_pips = 0.0050_f64;  // 50 pips
+    let sl_pips = 0.0025_f64;  // 25 pips
+    // Walk through prices to simulate each trade
+    let mut price_idx = 0usize;
+    for (fill_num, (side, entry, _sl, _tp, _)) in trades.iter().enumerate() {
+        // Find approximate candle index for this fill
+        // by finding when price was closest to entry price
+        let search_start = if fill_num > 0 { price_idx } else { 0 };
+        let mut best_idx = search_start;
+        let mut best_diff = f64::MAX;
+        for j in search_start..prices.len() {
+            let diff = (prices[j] - entry).abs();
+            if diff < best_diff {
+                best_diff = diff;
+                best_idx = j;
+            }
+            if diff < 0.0001 { break; }
+        }
+        price_idx = best_idx;
+        // Walk forward to see if TP or SL hit first
+        let tp_level = if side == "Buy" { entry + tp_pips } else { entry - tp_pips };
+        let sl_level = if side == "Buy" { entry - sl_pips } else { entry + sl_pips };
+        let mut hit_tp = false;
+        let mut hit_sl = false;
+        for j in (price_idx + 1)..(price_idx + 60).min(prices.len()) {
+            let px = prices[j];
+            if side == "Buy" {
+                if px >= tp_level { hit_tp = true; break; }
+                if px <= sl_level { hit_sl = true; break; }
+            } else {
+                if px <= tp_level { hit_tp = true; break; }
+                if px >= sl_level { hit_sl = true; break; }
+            }
+        }
+        let trade_pnl = if hit_tp {
+            wins += 1;
+            tp_pips * 5000.0
+        } else if hit_sl {
+            losses += 1;
+            -sl_pips * 5000.0
+        } else {
+            // timed out - use mark to market
+            let end_px = prices[(price_idx + 60).min(prices.len()-1)];
+            let dist = if side == "Buy" { end_px - entry } else { entry - end_px };
+            dist * 5000.0
+        };
+        per_trade_pnl += trade_pnl;
+    }
+    let win_rate = if wins + losses > 0 { wins as f64 / (wins + losses) as f64 * 100.0 } else { 0.0 };
+    println!("=== Backtest Summary ===\nDecisions: {}\nAbstains: {} ({}%)\nFills: {}\nAvg Slippage (bps): {:.2}\nPaired P&L: ${:.2}\nPer-Trade P&L (50pip TP/25pip SL): ${:.2}\nWin Rate: {:.1}%\nWins: {} Losses: {}",
+        dec, abst, if dec>0 { (abst as f64 / dec as f64)*100.0 } else { 0.0 }, fills, avg_slip, pnl, per_trade_pnl, win_rate, wins, losses);
     Ok(())
 }
 
