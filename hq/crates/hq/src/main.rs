@@ -1518,6 +1518,21 @@ fn backtest() -> anyhow::Result<()> {
             }
         }
     }
+    // Load news blackout dates
+    let mut blackout_dates: std::collections::HashSet<String> = std::collections::HashSet::new();
+    if let Ok(mut rdr) = csv::ReaderBuilder::new().has_headers(false).from_path("data/news_blackout.csv") {
+        for r in rdr.records().flatten() {
+            blackout_dates.insert(r[0].to_string());
+        }
+    }
+    tracing::info!("Loaded {} news blackout dates", blackout_dates.len());
+    // Load real dates for each candle
+    let mut candle_dates: Vec<String> = vec![];
+    if let Ok(mut rdr) = csv::ReaderBuilder::new().has_headers(false).from_path("data/sample_dates.csv") {
+        for r in rdr.records().flatten() {
+            candle_dates.push(r[0].to_string());
+        }
+    }
     if prices.is_empty() {
         let mut p = 190.0;
         let drift: f64 = std::env::var("BT_TREND_PER_STEP")
@@ -1532,6 +1547,8 @@ fn backtest() -> anyhow::Result<()> {
     }
     for (i, p) in prices.iter().enumerate() {
         std::env::set_var("HQ_MODE", "paper");
+        // News filter disabled - using real dates for future use
+        let _date_str = candle_dates.get(i).cloned().unwrap_or_default();
         let fast = if i >= 9 {
             prices[i - 9..=i].iter().copied().sum::<f64>() / 10.0
         } else {
