@@ -116,6 +116,7 @@ pub mod oanda {
                 Ok(resp) => {
                     if resp.status().is_success() {
                         return Ok(api::ExecReport {
+                            side: match order.side { api::OrderSide::Buy => "Buy".to_string(), api::OrderSide::Sell => "Sell".to_string() },
                             idempotency_key: order.idempotency_key.clone(),
                             symbol: order.symbol.clone(),
                             filled_qty: order.qty,
@@ -193,6 +194,7 @@ pub mod oanda {
                 Ok(resp) => {
                     if resp.status().is_success() {
                         return Ok(api::ExecReport {
+                            side: match order.side { api::OrderSide::Buy => "Buy".to_string(), api::OrderSide::Sell => "Sell".to_string() },
                             idempotency_key: order.idempotency_key.clone(),
                             symbol: order.symbol.clone(),
                             filled_qty: 0.0, // Limit orders may not fill immediately
@@ -270,6 +272,7 @@ pub mod oanda {
                 Ok(resp) => {
                     if resp.status().is_success() {
                         return Ok(api::ExecReport {
+                            side: match order.side { api::OrderSide::Buy => "Buy".to_string(), api::OrderSide::Sell => "Sell".to_string() },
                             idempotency_key: order.idempotency_key.clone(),
                             symbol: order.symbol.clone(),
                             filled_qty: order.qty, // IOC fills immediately or cancels
@@ -569,6 +572,7 @@ pub mod coinexx {
                             }
                             
                             return Ok(api::ExecReport {
+                                side: match order.side { api::OrderSide::Buy => "Buy".to_string(), api::OrderSide::Sell => "Sell".to_string() },
                                 idempotency_key: order_id.to_string(),
                                 symbol: order.symbol.clone(),
                                 filled_qty: actual_qty,
@@ -578,6 +582,7 @@ pub mod coinexx {
                             });
                         } else {
                             return Ok(api::ExecReport {
+                                side: match order.side { api::OrderSide::Buy => "Buy".to_string(), api::OrderSide::Sell => "Sell".to_string() },
                                 idempotency_key: order.idempotency_key.clone(),
                                 symbol: order.symbol.clone(),
                                 filled_qty: order.qty,
@@ -651,6 +656,7 @@ pub mod coinexx {
                 Ok(r) => {
                     if r.status().is_success() {
                         return Ok(api::ExecReport {
+                            side: match order.side { api::OrderSide::Buy => "Buy".to_string(), api::OrderSide::Sell => "Sell".to_string() },
                             idempotency_key: order.idempotency_key.clone(),
                             symbol: order.symbol.clone(),
                             filled_qty: 0.0,

@@ -1750,6 +1750,91 @@ async fn main() -> anyhow::Result<()> {
         return Ok(());
     }
 
+    // Live OANDA price polling loop
+    if std::env::var("HQ_MODE").ok().as_deref() == Some("live_oanda") {
+        let api_key = std::env::var("OANDA_API_KEY").unwrap_or_default();
+        let account_id = std::env::var("OANDA_ACCOUNT_ID").unwrap_or_default();
+        let host = std::env::var("OANDA_HOST").unwrap_or_else(|_| "api-fxpractice.oanda.com".into());
+        let symbol = std::env::var("HQ_SYMBOL").unwrap_or_else(|_| "EUR_USD".into());
+        let poll_secs: u64 = std::env::var("HQ_POLL_SECS")
+            .ok().and_then(|s| s.parse().ok()).unwrap_or(300);
+        
+        tracing::info!("Starting live OANDA polling for {} every {}s", symbol, poll_secs);
+        
+        let client = reqwest::Client::new();
+        let mut price_history: Vec<f64> = vec![];
+        
+        loop {
+            // Fetch last 210 daily candles from OANDA
+            let url = format!(
+                "https://{}/v3/instruments/{}/candles?count=210&granularity=D&price=M",
+                host, symbol
+            );
+            match client.get(&url)
+                .header("Authorization", format!("Bearer {}", api_key))
+                .send().await {
+                Ok(resp) => {
+                    if let Ok(json) = resp.json::<serde_json::Value>().await {
+                        if let Some(candles) = json["candles"].as_array() {
+                            price_history = candles.iter()
+                                .filter_map(|c| c["mid"]["c"].as_str()
+                                    .and_then(|p| p.parse::<f64>().ok()))
+                                .collect();
+                            
+                            if price_history.len() >= 20 {
+                                let i = price_history.len() - 1;
+                                let p = price_history[i];
+                                
+                                // Calculate BB
+                                let w = &price_history[i-19..=i];
+                                let mean = w.iter().sum::<f64>() / 20.0;
+                                let std = (w.iter().map(|x| (x-mean).powi(2)).sum::<f64>() / 20.0).sqrt();
+                                let bb_upper = mean + 2.0 * std;
+                                let bb_lower = mean - 2.0 * std;
+                                
+                                // Calculate RSI
+                                let rsi = if i >= 14 {
+                                    let mut gains = 0.0_f64;
+                                    let mut losses = 0.0_f64;
+                                    for j in i-14..i {
+                                        let chg = price_history[j+1] - price_history[j];
+                                        if chg > 0.0 { gains += chg; } else { losses += chg.abs(); }
+                                    }
+                                    let ag = gains/14.0; let al = losses/14.0;
+                                    if al == 0.0 { 100.0 } else { 100.0 - (100.0/(1.0+ag/al)) }
+                                } else { 50.0 };
+                                
+                                // Check signal
+                                let bb_buy = p <= bb_lower * 1.001 && rsi < 35.0;
+                                let bb_sell = p >= bb_upper * 0.999001 && rsi > 65.0;
+                                
+                                tracing::info!(
+                                    "EUR_USD price={:.5} BB_lower={:.5} BB_upper={:.5} RSI={:.1} buy={} sell={}",
+                                    p, bb_lower, bb_upper, rsi, bb_buy, bb_sell
+                                );
+                                
+                                if bb_buy || bb_sell {
+                                    // Calculate fast/slow MA for AlphaScout
+                                    let fast = price_history[i-9..=i].iter().sum::<f64>() / 10.0;
+                                    let slow = price_history[i-199..=i].iter().sum::<f64>() / 200.0;
+                                    let vol = std.max(0.001);
+                                    let input = alphascout::Inputs {
+                                        symbol: symbol.clone(),
+                                        price: p, fast_ma: fast, slow_ma: slow, vol, rsi_14: rsi,
+                                    };
+                                    let _ = run_once_with(input);
+                                    tracing::info!("🚨 SIGNAL FIRED! {} RSI={:.1}", if bb_buy {"BUY"} else {"SELL"}, rsi);
+                                }
+                            }
+                        }
+                    }
+                }
+                Err(e) => tracing::error!("OANDA fetch error: {}", e),
+            }
+            tokio::time::sleep(tokio::time::Duration::from_secs(poll_secs)).await;
+        }
+    }
+
     let symbols = load_symbols();
     let interval_secs = std::env::var("SENTINEL_INTERVAL_SECS")
         .ok()
