@@ -12,6 +12,7 @@ pub struct Inputs {
     pub fast_ma: f64,
     pub slow_ma: f64,
     pub vol: f64, // e.g., ATR or stdev
+    pub rsi_14: f64, // RSI over 14 periods
 }
 
 impl AlphaScout {
@@ -22,6 +23,20 @@ impl AlphaScout {
         let uncertainty = (1.0 - raw.abs()).clamp(0.0, 1.0);
         let spread_magnitude = spread.abs() / scale;
         let regime_fit = (spread_magnitude * 2.0).min(1.0);
+        // RSI confirmation: penalize signals that go against momentum
+        // Buy signal (raw > 0) confirmed when RSI > 50, penalized when RSI < 50
+        // Sell signal (raw < 0) confirmed when RSI < 50, penalized when RSI > 50
+        let rsi_confirm = if raw > 0.0 {
+            ((i.rsi_14 - 50.0) / 50.0).clamp(-1.0, 1.0)
+        } else if raw < 0.0 {
+            ((50.0 - i.rsi_14) / 50.0).clamp(-1.0, 1.0)
+        } else {
+            0.0
+        };
+        // Boost regime_fit when RSI confirms, reduce when it conflicts
+        let regime_fit = (regime_fit * (1.0 + rsi_confirm * 0.5)).clamp(0.0, 1.0);
+        // Also scale the raw score by RSI confirmation
+        let raw = if rsi_confirm < 0.0 { raw * (1.0 + rsi_confirm) } else { raw };
 
         let data_quality = if i.vol.is_finite() && i.vol > 0.0 && i.price.is_finite() {
             1.0
@@ -70,6 +85,7 @@ impl api::Agent for AlphaScout {
             fast_ma,
             slow_ma,
             vol,
+            rsi_14: 50.0,
         };
         Self::infer_core(&inputs)
     }
@@ -101,6 +117,7 @@ mod tests {
             fast_ma: 102.0,
             slow_ma: 100.0,
             vol: 1.0,
+            rsi_14: 60.0,
         };
         let s = AlphaScout::infer_core(&i).unwrap();
         assert!(s.score > 0.0);
@@ -110,6 +127,7 @@ mod tests {
             fast_ma: 98.0,
             slow_ma: 100.0,
             vol: 1.0,
+            rsi_14: 40.0,
         };
         let s2 = AlphaScout::infer_core(&i2).unwrap();
         assert!(s2.score < 0.0);

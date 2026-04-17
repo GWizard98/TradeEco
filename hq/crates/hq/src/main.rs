@@ -1549,6 +1549,28 @@ fn backtest() -> anyhow::Result<()> {
         std::env::set_var("HQ_MODE", "paper");
         // News filter disabled - using real dates for future use
         let _date_str = candle_dates.get(i).cloned().unwrap_or_default();
+        // Calculate RSI-14 first so filter can use it
+        let rsi_14 = if i >= 14 {
+            let window = &prices[i - 14..i];
+            let mut gains = 0.0_f64;
+            let mut losses = 0.0_f64;
+            for w in window.windows(2) {
+                let change = w[1] - w[0];
+                if change > 0.0 { gains += change; } else { losses += change.abs(); }
+            }
+            let avg_gain = gains / 14.0;
+            let avg_loss = losses / 14.0;
+            if avg_loss == 0.0 { 100.0 } else {
+                100.0 - (100.0 / (1.0 + avg_gain / avg_loss))
+            }
+        } else { 50.0 };
+        // Hard RSI filter - skip neutral zone AND overbought/oversold extremes
+        // Also handled in signal alignment check below
+        if rsi_14 > 45.0 && rsi_14 < 55.0 {
+            DECISIONS_TOTAL.fetch_add(1, Ordering::Relaxed);
+            ABSTAINS_TOTAL.fetch_add(1, Ordering::Relaxed);
+            continue;
+        }
         let fast = if i >= 9 {
             prices[i - 9..=i].iter().copied().sum::<f64>() / 10.0
         } else {
@@ -1573,7 +1595,19 @@ fn backtest() -> anyhow::Result<()> {
             fast_ma: fast,
             slow_ma: slow,
             vol,
+            rsi_14,
         };
+        // Directional RSI alignment check
+        // Buy signal (fast > slow) needs RSI > 55 for confirmation
+        // Sell signal (fast < slow) needs RSI < 45 for confirmation
+        let ma_bullish = fast > slow;
+        let ma_bearish = fast < slow;
+        let rsi_confirms = (ma_bullish && rsi_14 > 65.0) || (ma_bearish && rsi_14 < 35.0);
+        if !rsi_confirms {
+            DECISIONS_TOTAL.fetch_add(1, Ordering::Relaxed);
+            ABSTAINS_TOTAL.fetch_add(1, Ordering::Relaxed);
+            continue;
+        }
         let _ = run_once_with(input);
     }
     let dec = DECISIONS_TOTAL.load(Ordering::Relaxed);
@@ -1636,6 +1670,7 @@ async fn main() -> anyhow::Result<()> {
         fast_ma: fast,
         slow_ma: slow,
         vol,
+        rsi_14: 50.0,
     };
     run_once_with(input)?;
     Ok(())
