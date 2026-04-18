@@ -1812,6 +1812,21 @@ async fn main() -> anyhow::Result<()> {
                                     "EUR_USD price={:.5} BB_lower={:.5} BB_upper={:.5} RSI={:.1} buy={} sell={}",
                                     p, bb_lower, bb_upper, rsi, bb_buy, bb_sell
                                 );
+                                // Daily status via Siren
+                                use chrono::Timelike;
+                                let hour = chrono::Utc::now().hour();
+                                let minute = chrono::Utc::now().minute();
+                                if hour == 12 && minute < 5 {
+                                    let status_msg = format!(
+                                        "TradeEco running. EUR/USD @ {:.5} RSI={:.1} BB={:.5}-{:.5} No signal.",
+                                        p, rsi, bb_lower, bb_upper
+                                    );
+                                    let _ = std::process::Command::new("python3")
+                                        .arg("siren.py")
+                                        .arg(&status_msg)
+                                        .arg("STATUS")
+                                        .spawn();
+                                }
                                 
                                 if bb_buy || bb_sell {
                                     // Calculate fast/slow MA for AlphaScout
@@ -1823,7 +1838,19 @@ async fn main() -> anyhow::Result<()> {
                                         price: p, fast_ma: fast, slow_ma: slow, vol, rsi_14: rsi,
                                     };
                                     let _ = run_once_with(input);
-                                    tracing::info!("🚨 SIGNAL FIRED! {} RSI={:.1}", if bb_buy {"BUY"} else {"SELL"}, rsi);
+                                    let signal_type = if bb_buy { "BUY" } else { "SELL" };
+                                    tracing::info!("🚨 SIGNAL FIRED! {} RSI={:.1}", signal_type, rsi);
+                                    // Fire Siren alert
+                                    let siren_msg = format!("{} EUR/USD @ {:.5} RSI={:.1} TP={:.5} SL={:.5}",
+                                        signal_type, p,  rsi,
+                                        if bb_buy { p + 0.0050 } else { p - 0.0050 },
+                                        if bb_buy { p - 0.0025 } else { p + 0.0025 }
+                                    );
+                                    let _ = std::process::Command::new("python3")
+                                        .arg("siren.py")
+                                        .arg(&siren_msg)
+                                        .arg("CRITICAL")
+                                        .spawn();
                                 }
                             }
                         }
