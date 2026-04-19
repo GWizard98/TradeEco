@@ -108,7 +108,7 @@ fn load_config() -> Config {
             fusion: FusionCfg {
                 min_ev: 0.0,
                 min_regime: 0.5,
-                min_quality: 0.7,
+                min_quality: 0.1,
             },
             risk: RiskCfg {
                 leverage_max: 2.0,
@@ -124,7 +124,7 @@ fn load_config() -> Config {
         fusion: FusionCfg {
             min_ev: 0.0,
             min_regime: 0.5,
-            min_quality: 0.7,
+            min_quality: 0.1,
         },
         risk: RiskCfg {
             leverage_max: 2.0,
@@ -257,6 +257,8 @@ fn weighted_fusion(signals: &[ir::Signal], cfg: &Config) -> ir::Decision {
     let min_ev = cfg.fusion.min_ev;
     let min_regime = cfg.fusion.min_regime;
     let min_quality = cfg.fusion.min_quality;
+    let mut alpha_quality: Option<f64> = None;  // NEW
+    let mut alpha_regime: Option<f64> = None;   // NEW
 
     for s in signals {
         if symbol.is_empty() {
@@ -266,14 +268,22 @@ fn weighted_fusion(signals: &[ir::Signal], cfg: &Config) -> ir::Decision {
         let regime = get_feat(s, "regime_fit").unwrap_or(0.0);
         let quality = get_feat(s, "data_quality").unwrap_or(0.0);
         let ok = ev > min_ev && regime >= min_regime && quality >= min_quality;
+        let ok = ev > min_ev && regime >= min_regime && quality >= min_quality;
+            println!("🔍 QUALITY GATE CHECK:");
+            println!("   ev={:.4} > min_ev={:.4}? {}", ev, min_ev, ev > min_ev);
+            println!("   regime={:.4} >= min_regime={:.4}? {}", regime, min_regime, regime >= min_regime);
+            println!("   quality={:.4} >= min_quality={:.4}? {}", quality, min_quality, quality >= min_quality);
+            println!("   → GATE PASSED: {}", ok);
         let is_alpha = s.agent_id == "alphascout";
         let base_w = if is_alpha { 2.0 } else { 1.0 };
         let weight = base_w * (1.0 - s.uncertainty.clamp(0.0, 1.0)) * if ok { 1.0 } else { 0.1 };
         wsum += s.score * weight;
         wtot += weight.max(0.0);
         if is_alpha {
-            alpha_score = Some(s.score);
-            alpha_unc = Some(s.uncertainty);
+             alpha_score = Some(s.score);
+             alpha_unc = Some(s.uncertainty);
+             alpha_quality = Some(quality);  // Capture for strict gate test
+             alpha_regime = Some(regime);    // Capture for strict gate test
         }
     }
 
@@ -285,11 +295,27 @@ fn weighted_fusion(signals: &[ir::Signal], cfg: &Config) -> ir::Decision {
     } else {
         ir::Side::Hold
     };
-
+        println!("🔍 ALPHA CHECK:");
+        println!("   alpha_score: {:?}", alpha_score);
+        println!("   alpha_unc: {:?}", alpha_unc);
+        println!("   avg: {}", avg);
+        println!("   decision before alpha check: {:?}", decision);
     if let (Some(a), Some(u)) = (alpha_score, alpha_unc) {
         let aligned = (a > 0.0 && matches!(decision, ir::Side::Buy))
             || (a < 0.0 && matches!(decision, ir::Side::Sell));
-        let min_conf = (1.0 - u) >= 0.1 && a.abs() >= 0.61;
+        let min_conf = (1.0 - u) >= 0.1 && a.abs() >= 0.1;
+        let min_conf = (1.0 - u) >= 0.1 && a.abs() >= 0.1;  // Current loose gate
+        // TEST: Would this pass strict gates?
+        let strict_quality = alpha_quality.unwrap_or(0.0) >= 0.5;
+        let strict_regime = alpha_regime.unwrap_or(0.0) >= 0.3;
+        let strict_alpha = a.abs() >= 0.61;
+        let would_pass_strict = strict_quality && strict_regime && strict_alpha;
+
+        println!("🎯 STRICT GATE TEST:");
+        println!("   Quality: {} (need ≥0.5) {}", alpha_quality.unwrap_or(0.0), if strict_quality { "✅" } else { "❌" });
+        println!("   Regime: {} (need ≥0.3) {}", alpha_regime.unwrap_or(0.0), if strict_regime { "✅" } else { "❌" });
+        println!("   Alpha: {} (need ≥0.61) {}", a.abs(), if strict_alpha { "✅" } else { "❌" });
+        println!("   → VERDICT: {}", if would_pass_strict { "WOULD PASS STRICT ✅" } else { "WOULD FAIL STRICT ❌" });
         if !(aligned && min_conf) {
             decision = ir::Side::Hold;
         }
@@ -1656,6 +1682,22 @@ fn backtest() -> anyhow::Result<()> {
         let macd_bullish = macd_line > macd_signal;
         let macd_bearish = macd_line < macd_signal;
 
+        // Debug logging to see why signals trigger or don't
+        println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+        println!("📊 PRICE: {:.5} | RSI: {:.1}", *p, rsi_14);
+        println!("📈 BB: Lower={:.5} | Upper={:.5}", bb_lower, bb_upper);
+        println!("🎯 BUY CONDITIONS:");
+        println!("   Price <= BB_lower*1.001? {} (need: {:.5} <= {:.5})", 
+            *p <= bb_lower * 1.001, *p, bb_lower * 1.001);
+        println!("   RSI < 35? {} ({:.1} < 35)", rsi_14 < 35.0, rsi_14);
+        println!("   → BUY SIGNAL: {}", bb_buy_signal);
+        println!("🎯 SELL CONDITIONS:");
+        println!("   Price >= BB_upper*0.999? {} (need: {:.5} >= {:.5})", 
+            *p >= bb_upper * 0.999001, *p, bb_upper * 0.999001);
+        println!("   RSI > 65? {} ({:.1} > 65)", rsi_14 > 65.0, rsi_14);
+        println!("   → SELL SIGNAL: {}", bb_sell_signal);
+        println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+
         let entry_signal = bb_buy_signal || bb_sell_signal;
         if !entry_signal {
             DECISIONS_TOTAL.fetch_add(1, Ordering::Relaxed);
@@ -1869,7 +1911,7 @@ async fn main() -> anyhow::Result<()> {
         .unwrap_or(300);
     start_sentinel(symbols, interval_secs).await;
 
-    let symbol = std::env::var("HQ_SYMBOL").unwrap_or_else(|_| "AAPL".into());
+    let symbol = std::env::var("HQ_SYMBOL").unwrap_or_else(|_| "EUR_USD".into());
     let price: f64 = std::env::var("HQ_PRICE")
         .ok()
         .and_then(|s| s.parse().ok())

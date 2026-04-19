@@ -4,13 +4,13 @@ portfolio_notional = 100000.0
 
 [fusion]
 min_ev = 0.0
-min_regime = 0.3
-min_quality = 0.5
+min_regime = 0.0
+min_quality = 0.1
 
 [risk]
 leverage_max = 2.0
 account_equity = 100000.0
-per_trade_risk_pct = 0.01
+per_trade_risk_pct = 0.02
 
 [exec]
 block_weekend = false
